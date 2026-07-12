@@ -88,12 +88,13 @@ const initialTransfers = [
 ];
 
 // Sidebar navigation link component to style active routes
-function SidebarLink({ to, label, icon }) {
+function SidebarLink({ to, label, icon, onClick }) {
   const location = useLocation();
   const isActive = location.pathname === to;
   return (
     <Link
       to={to}
+      onClick={onClick}
       className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${
         isActive
           ? 'bg-emerald-600 text-white font-medium shadow-lg shadow-emerald-950/20'
@@ -108,6 +109,10 @@ function SidebarLink({ to, label, icon }) {
 
 function NavigationAndSidebar() {
   const { currentRole, setCurrentRole, assets, authUser, handleLogout } = React.useContext(AppContext);
+
+  // Mobile Menu State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -149,10 +154,15 @@ function NavigationAndSidebar() {
   const loggedIn = getLoggedInUser();
 
   return (
-    <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
+    <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden relative">
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" onClick={closeMobileMenu} />
+      )}
+
       {/* Fixed Sidebar */}
-      <aside className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col justify-between shrink-0">
-        <div>
+      <aside className={`absolute md:relative z-50 w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col justify-between shrink-0 h-full transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        <div className="flex-1 overflow-y-auto min-h-0">
           {/* Logo */}
           <div className="px-6 py-6 border-b border-zinc-800/80 flex items-center space-x-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center font-bold text-zinc-950 text-lg shadow-md shadow-emerald-500/10">
@@ -170,15 +180,15 @@ function NavigationAndSidebar() {
 
           {/* Navigation Links */}
           <nav className="px-3 py-6 space-y-1">
-            <SidebarLink to="/" label="Dashboard" icon="📊" />
-            <SidebarLink to="/setup" label="Organization setup" icon="🏢" />
-            <SidebarLink to="/assets" label="Assets" icon="📦" />
-            <SidebarLink to="/allocations" label="Allocation & Transfer" icon="🔄" />
-            <SidebarLink to="/bookings" label="Resource Booking" icon="📅" />
-            <SidebarLink to="/maintenance" label="Maintenance" icon="🛠️" />
-            <SidebarLink to="/audits" label="Audit" icon="📋" />
-            <SidebarLink to="/reports" label="Reports" icon="📈" />
-            <SidebarLink to="/notifications" label="Notifications" icon="🔔" />
+            <SidebarLink to="/" label="Dashboard" icon="📊" onClick={closeMobileMenu} />
+            <SidebarLink to="/setup" label="Organization setup" icon="🏢" onClick={closeMobileMenu} />
+            <SidebarLink to="/assets" label="Assets" icon="📦" onClick={closeMobileMenu} />
+            <SidebarLink to="/allocations" label="Allocation & Transfer" icon="🔄" onClick={closeMobileMenu} />
+            <SidebarLink to="/bookings" label="Resource Booking" icon="📅" onClick={closeMobileMenu} />
+            <SidebarLink to="/maintenance" label="Maintenance" icon="🛠️" onClick={closeMobileMenu} />
+            <SidebarLink to="/audits" label="Audit" icon="📋" onClick={closeMobileMenu} />
+            <SidebarLink to="/reports" label="Reports" icon="📈" onClick={closeMobileMenu} />
+            <SidebarLink to="/notifications" label="Notifications" icon="🔔" onClick={closeMobileMenu} />
           </nav>
         </div>
 
@@ -219,14 +229,22 @@ function NavigationAndSidebar() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-zinc-950 overflow-hidden">
         {/* Header with search bar */}
-        <header className="h-16 border-b border-zinc-800/80 px-8 flex items-center justify-between bg-zinc-900/30 backdrop-blur-md sticky top-0 z-10 shrink-0">
-          <div className="flex items-center space-x-3 shrink-0">
-            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">
+        <header className="h-16 border-b border-zinc-800/80 px-4 md:px-8 flex items-center justify-between bg-zinc-900/30 backdrop-blur-md sticky top-0 z-10 shrink-0">
+          <div className="flex items-center space-x-2 md:space-x-3 shrink-0">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-1.5 text-zinc-400 hover:text-white cursor-pointer -ml-1 rounded-md hover:bg-zinc-800"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-widest hidden sm:inline-block">
               Overview
             </span>
-            <span className="text-zinc-700">|</span>
+            <span className="text-zinc-700 hidden sm:inline-block">|</span>
             <h2 className="text-xs font-bold text-zinc-400 tracking-wide">
               {currentRole} Console
             </h2>
@@ -279,7 +297,7 @@ function NavigationAndSidebar() {
         </header>
 
         {/* View Canvas */}
-        <div className="flex-1 p-8 overflow-y-auto">
+        <div className="flex-1 p-8 overflow-y-auto min-h-0">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/setup" element={<OrganizationSetup />} />
