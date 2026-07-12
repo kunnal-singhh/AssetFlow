@@ -1,0 +1,162 @@
+// Developer 1: Set up Prisma schema. Ensure DB connections match env vars and use MySQL.
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Developer 1: Implement User model. Handle authentication constraints.
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  role      UserRole @default(EMPLOYEE)
+  metadata  Json?    // Use MySQL native JSON for extensible attributes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations AllocationLog[]
+  bookings    ResourceBooking[]
+  requests    MaintenanceRequest[]
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+// Developer 1: Department logic goes here
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  assets      Asset[]
+}
+
+// Developer 2: AssetCategory logic.
+model AssetCategory {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  attributes  Json?    // Define flexible category attributes
+  assets      Asset[]
+}
+
+// Developer 2: Core Asset model. Implement lifecycle status check here.
+model Asset {
+  id            Int           @id @default(autoincrement())
+  name          String
+  status        AssetStatus   @default(AVAILABLE)
+  departmentId  Int?
+  categoryId    Int?
+  details       Json?         // Hardware/software specific info
+
+  department    Department?   @relation(fields: [departmentId], references: [id])
+  category      AssetCategory? @relation(fields: [categoryId], references: [id])
+
+  allocations   AllocationLog[]
+  bookings      ResourceBooking[]
+  maintenances  MaintenanceRequest[]
+  auditItems    AuditLineItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ALLOCATED
+  MAINTENANCE
+  RETIRED
+}
+
+// Developer 2: Implement allocation history constraints.
+model AllocationLog {
+  id         Int      @id @default(autoincrement())
+  assetId    Int
+  userId     Int
+  allocatedAt DateTime @default(now())
+  returnedAt DateTime?
+
+  asset      Asset    @relation(fields: [assetId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+// Developer 4: Resource Booking model
+model ResourceBooking {
+  id         Int      @id @default(autoincrement())
+  assetId    Int
+  userId     Int
+  startTime  DateTime
+  endTime    DateTime
+  status     BookingStatus @default(PENDING)
+
+  asset      Asset    @relation(fields: [assetId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+// Developer 4: Maintenance Request logic
+model MaintenanceRequest {
+  id          Int      @id @default(autoincrement())
+  assetId     Int
+  userId      Int
+  description String
+  status      MaintenanceStatus @default(OPEN)
+  issueData   Json?    // Flexible issue context data
+
+  asset       Asset    @relation(fields: [assetId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+// Developer 3: Audit cycles setup
+model AuditCycle {
+  id          Int      @id @default(autoincrement())
+  name        String
+  startDate   DateTime
+  endDate     DateTime?
+  status      AuditStatus @default(PLANNED)
+
+  lineItems   AuditLineItem[]
+}
+
+enum AuditStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+// Developer 3: Audit line item logic. Ensure verification matches asset ID.
+model AuditLineItem {
+  id            Int      @id @default(autoincrement())
+  auditCycleId  Int
+  assetId       Int
+  status        AuditItemStatus @default(PENDING)
+  notes         String?
+  auditData     Json?    // Capture specific audit findings
+
+  auditCycle    AuditCycle @relation(fields: [auditCycleId], references: [id])
+  asset         Asset      @relation(fields: [assetId], references: [id])
+}
+
+enum AuditItemStatus {
+  PENDING
+  VERIFIED
+  DISCREPANCY
+}
