@@ -5,6 +5,7 @@ import AssetInventory from './components/AssetInventory';
 import AuditView from './components/AuditView';
 import BookingMaintenance from './components/BookingMaintenance';
 import OrganizationSetup from './components/OrganizationSetup';
+import { ReportsAnalytics, ActivityLogs } from './components/audit-analytics';
 
 // Create the shared state context
 export const AppContext = createContext();
@@ -258,8 +259,8 @@ function NavigationAndSidebar() {
             <Route path="/bookings" element={<BookingMaintenance />} />
             <Route path="/maintenance" element={<div className="p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center"><h2 className="text-xl font-bold text-zinc-200 mb-2">Maintenance Management</h2><p className="text-zinc-500">Route repairs and inspect assets. Access this using the "Raise Request" action on the Dashboard.</p></div>} />
             <Route path="/audits" element={<AuditView />} />
-            <Route path="/reports" element={<div className="p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center"><h2 className="text-xl font-bold text-zinc-200 mb-2">Reports & Analytics</h2><p className="text-zinc-500">View asset utilization trends, maintenance frequency, and export summaries.</p></div>} />
-            <Route path="/notifications" element={<div className="p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center"><h2 className="text-xl font-bold text-zinc-200 mb-2">System Notifications</h2><p className="text-zinc-500">Log of admin/manager alerts, overdue triggers, and booking confirmations.</p></div>} />
+            <Route path="/reports" element={<ReportsAnalytics />} />
+            <Route path="/notifications" element={<ActivityLogs />} />
           </Routes>
         </div>
       </main>
