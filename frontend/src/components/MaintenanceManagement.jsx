@@ -517,10 +517,10 @@ function AssetHistoryTable({ records, filterTag, onClearFilter }) {
 const MaintenanceManagement = () => {
   const {
     maintenance,
-    createMaintenanceRequest,  // (requestData) => void — adds to context & activity log
     assets,
     currentRole,
     logActivity,
+    loadGlobalState,
   } = useContext(AppContext);
 
   // Local enriched copy of records so workflow transitions reflect immediately.
@@ -552,53 +552,45 @@ const MaintenanceManagement = () => {
     }
   };
 
-  /**
-   * Raise a new maintenance request.
-   * Delegates to App.jsx's createMaintenanceRequest for context + activity log.
-   * TODO (Backend): POST /api/maintenance
-   */
-  function handleRaise(data) {
-    const newRec = {
-      ...data,
-      id: Date.now(),
-      status: 'Pending',
-      date: new Date().toISOString().slice(0, 10),
-      raisedBy: data.raisedBy,
-    };
-    createMaintenanceRequest(newRec);
-    setRecords(prev => [newRec, ...prev]);
-    logActivity('maintenance', `Maintenance request raised for ${data.assetName} (${data.assetTag}) — ${data.priority} priority.`);
+  async function handleRaise(data) {
+    try {
+      const payload = {
+        assetId: assets.find(a => a.tag === data.assetTag)?.id,
+        description: data.description,
+        priority: data.priority,
+        raisedById: 1, // fallback
+      };
+      await import('../api/maintenanceApi').then(m => m.createMaintenance(payload));
+      logActivity('maintenance', `Maintenance request raised for ${data.assetName} (${data.assetTag}) — ${data.priority} priority.`);
+      await loadGlobalState();
+    } catch (e) {
+      console.error('Failed to raise request', e);
+    }
   }
 
-  /**
-   * Transition a record to a new workflow status.
-   *
-   * Side-effects:
-   *   Approved  → mark asset "Under Maintenance" in local assets (App context already does this
-   *               via createMaintenanceRequest, but we mirror for immediate Kanban update).
-   *   Resolved  → mark asset "Available" (mirrored locally; App context doesn't auto-resolve).
-   *
-   * TODO (Backend): PATCH /api/maintenance/:id { status, technician?, rejectReason?, resolvedAt? }
-   *   Server atomically updates maintenance_requests AND assets tables in one transaction.
-   */
-  function handleTransition(id, newStatus, extras = {}) {
-    setRecords(prev =>
-      prev.map(r => r.id === id ? { ...r, status: newStatus, ...extras } : r)
-    );
-
-    const target = records.find(r => r.id === id);
-    if (!target) return;
-
-    if (newStatus === 'Approved') {
-      // TODO (Backend): Server sets assets.status = 'Under Maintenance'
-      logActivity('maintenance', `Maintenance approved for ${target.assetName} (${target.assetTag}) — asset set to Under Maintenance.`);
-    } else if (newStatus === 'Rejected') {
-      logActivity('maintenance', `Maintenance request for ${target.assetName} (${target.assetTag}) rejected.`);
-    } else if (newStatus === 'Technician Assigned') {
-      logActivity('maintenance', `Technician ${extras.technician} assigned to ${target.assetName} (${target.assetTag}).`);
-    } else if (newStatus === 'Resolved') {
-      // TODO (Backend): Server sets assets.status = 'Available'
-      logActivity('maintenance', `${target.assetName} (${target.assetTag}) maintenance resolved — asset back to Available.`);
+  async function handleTransition(id, newStatus, extras = {}) {
+    try {
+      const payload = { status: newStatus, ...extras };
+      if (extras.resolvedAt) {
+        payload.resolvedAt = new Date(extras.resolvedAt).toISOString();
+      }
+      await import('../api/maintenanceApi').then(m => m.updateMaintenance(id, payload));
+      
+      const target = records.find(r => r.id === id);
+      if (target) {
+        if (newStatus === 'Approved') {
+          logActivity('maintenance', `Maintenance approved for ${target.assetName} (${target.assetTag}) — asset set to Under Maintenance.`);
+        } else if (newStatus === 'Rejected') {
+          logActivity('maintenance', `Maintenance request for ${target.assetName} (${target.assetTag}) rejected.`);
+        } else if (newStatus === 'Technician Assigned') {
+          logActivity('maintenance', `Technician ${extras.technician} assigned to ${target.assetName} (${target.assetTag}).`);
+        } else if (newStatus === 'Resolved') {
+          logActivity('maintenance', `${target.assetName} (${target.assetTag}) maintenance resolved — asset back to Available.`);
+        }
+      }
+      await loadGlobalState();
+    } catch (e) {
+      console.error('Failed to transition status', e);
     }
   }
 

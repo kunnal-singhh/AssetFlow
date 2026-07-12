@@ -22,10 +22,7 @@ const AssetInventory = () => {
     categories,
     departments,
     employees,
-    registerAsset,
-    createBooking,
-    createMaintenanceRequest,
-    returnAsset,
+    loadGlobalState,
     logActivity
   } = useContext(AppContext);
 
@@ -114,58 +111,76 @@ const AssetInventory = () => {
   };
 
   // Submit handlers
-  const handleRegisterSubmit = (e) => {
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     if (!newAsset.name) return;
-    registerAsset({
-      ...newAsset,
-      name: toTitleCase(newAsset.name),
-      location: toTitleCase(newAsset.location)
-    });
-    setIsRegisterOpen(false);
-    setNewAsset({
-      name: '',
-      category: categories[0]?.name || 'Electronics',
-      serial: '',
-      acquisitionDate: new Date().toISOString().split('T')[0],
-      acquisitionCost: '',
-      condition: 'Excellent',
-      location: '',
-      shared: false,
-      department: departments[0]?.name || 'Engineering'
-    });
+    try {
+      const payload = {
+        ...newAsset,
+        name: toTitleCase(newAsset.name),
+        location: toTitleCase(newAsset.location),
+        categoryId: categories.find(c => c.name === newAsset.category)?.id || 1,
+        departmentId: departments.find(d => d.name === newAsset.department)?.id || 1,
+      };
+      await import('../api/assetApi').then(m => m.createAsset(payload));
+      setIsRegisterOpen(false);
+      setNewAsset({
+        name: '',
+        category: categories[0]?.name || 'Electronics',
+        serial: '',
+        acquisitionDate: new Date().toISOString().split('T')[0],
+        acquisitionCost: '',
+        condition: 'Excellent',
+        location: '',
+        shared: false,
+        department: departments[0]?.name || 'Engineering'
+      });
+      await loadGlobalState();
+    } catch (error) {
+      console.error('Failed to register asset', error);
+    }
   };
 
-  const handleAllocateSubmit = (e) => {
+  const handleAllocateSubmit = async (e) => {
     e.preventDefault();
     if (!allocationForm.userName || !allocateAssetTarget) return;
 
-    createBooking({
-      assetTag: allocateAssetTarget.tag,
-      assetName: allocateAssetTarget.name,
-      userName: allocationForm.userName,
-      startTime: allocationForm.startTime,
-      endTime: allocationForm.endTime
-    });
-    setAllocateAssetTarget(null);
-    setAllocationForm({ userName: '', startTime: '', endTime: '' });
-    alert('Asset successfully allocated!');
+    try {
+      const payload = {
+        assetId: allocateAssetTarget.id,
+        employeeId: employees.find(emp => emp.name === allocationForm.userName)?.id || 1,
+        startTime: new Date(allocationForm.startTime).toISOString(),
+        endTime: new Date(allocationForm.endTime).toISOString(),
+      };
+      await import('../api/bookingApi').then(m => m.createBooking(payload));
+      setAllocateAssetTarget(null);
+      setAllocationForm({ userName: '', startTime: '', endTime: '' });
+      alert('Asset successfully allocated!');
+      await loadGlobalState();
+    } catch (error) {
+      console.error('Failed to allocate asset', error);
+    }
   };
 
-  const handleMaintenanceSubmit = (e) => {
+  const handleMaintenanceSubmit = async (e) => {
     e.preventDefault();
     if (!maintenanceForm.description || !maintenanceAssetTarget) return;
 
-    createMaintenanceRequest({
-      assetTag: maintenanceAssetTarget.tag,
-      assetName: maintenanceAssetTarget.name,
-      userName: maintenanceForm.userName || 'Kunal Singh',
-      description: maintenanceForm.description,
-      priority: maintenanceForm.priority
-    });
-    setMaintenanceAssetTarget(null);
-    setMaintenanceForm({ userName: '', description: '', priority: 'Medium' });
-    alert('Maintenance request successfully raised!');
+    try {
+      const payload = {
+        assetId: maintenanceAssetTarget.id,
+        description: maintenanceForm.description,
+        priority: maintenanceForm.priority,
+        raisedById: employees.find(emp => emp.name === maintenanceForm.userName)?.id || 1, // Fallback
+      };
+      await import('../api/maintenanceApi').then(m => m.createMaintenance(payload));
+      setMaintenanceAssetTarget(null);
+      setMaintenanceForm({ userName: '', description: '', priority: 'Medium' });
+      alert('Maintenance request successfully raised!');
+      await loadGlobalState();
+    } catch (error) {
+      console.error('Failed to raise maintenance request', error);
+    }
   };
 
   return (

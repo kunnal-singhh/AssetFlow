@@ -3,19 +3,11 @@ import {
   fetchAllocationState,
   allocateAsset,
   requestTransfer,
-  decideTransfer,
   returnAsset,
 } from '../api/allocationApi';
 import './AssetAllocation.css';
 
-// Developer 2: Asset Allocation & Transfer screen.
-// Manages who holds what, with explicit conflict rules, a transfer approval
-// workflow, a return/check-in flow, and overdue flagging that can feed the
-// Dashboard + Notifications.
-
 const RETURN_CONDITIONS = ['Good', 'Fair', 'Damaged', 'Needs Repair'];
-
-// --- Small formatting helpers ------------------------------------------------
 
 const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
@@ -27,24 +19,15 @@ const overdueLabel = (iso) => {
   return `${days} day${days === 1 ? '' : 's'} overdue`;
 };
 
-// =============================================================================
-// Main screen
-// =============================================================================
-
 const AssetAllocation = () => {
-  const [state, setState] = useState(null); // full joined view from the API
+  const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actingUserId, setActingUserId] = useState(1);
 
-  // No auth wired yet: pick who is "acting" so approval gating can be demoed.
-  const [actingUserId, setActingUserId] = useState(3); // Aditi Rao (MANAGER)
+  const [returnTarget, setReturnTarget] = useState(null);
+  const [transferSeed, setTransferSeed] = useState(null);
 
-  const [returnTarget, setReturnTarget] = useState(null); // allocation being returned
-  const [transferSeed, setTransferSeed] = useState(null); // { assetId, heldBy } prefilled
-
-  // Fetch on mount. setState lives inside the async IIFE (after await), so it
-  // never runs synchronously in the effect body; the `active` guard avoids
-  // setting state if the screen unmounts mid-request.
   useEffect(() => {
     let active = true;
     (async () => {
@@ -60,16 +43,13 @@ const AssetAllocation = () => {
         if (active) setLoading(false);
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const actingUser = useMemo(
     () => state?.users.find((u) => u.id === actingUserId) ?? null,
     [state, actingUserId],
   );
-  const canApprove = actingUser?.role === 'MANAGER' || actingUser?.role === 'ADMIN';
 
   const refresh = useCallback(async () => {
     setState(await fetchAllocationState());
@@ -85,40 +65,17 @@ const AssetAllocation = () => {
           <h2>Asset Allocation &amp; Transfer</h2>
           <p className="muted">Manage who holds what — with conflict rules, transfers, and returns.</p>
         </div>
-        <label className="acting-as">
-          <span>Acting as</span>
-          <select value={actingUserId} onChange={(e) => setActingUserId(Number(e.target.value))}>
-            {state.users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} · {u.role}
-              </option>
-            ))}
-          </select>
-        </label>
       </header>
 
       <OverdueBanner overdue={state.overdue} />
 
       <div className="allocation-grid">
-        <section className="panel">
+        <section className="panel" style={{ gridColumn: '1 / -1' }}>
           <h3>Allocate an asset</h3>
           <AllocateForm
             state={state}
             onAllocated={refresh}
             onRequestTransfer={(seed) => setTransferSeed(seed)}
-          />
-        </section>
-
-        <section className="panel">
-          <div className="panel-title-row">
-            <h3>Transfer requests</h3>
-            <span className="pill">{state.transfers.filter((t) => t.status === 'REQUESTED').length} pending</span>
-          </div>
-          <TransfersPanel
-            transfers={state.transfers}
-            canApprove={canApprove}
-            actingUserId={actingUserId}
-            onDecided={refresh}
           />
         </section>
       </div>
@@ -129,7 +86,7 @@ const AssetAllocation = () => {
           allocations={state.activeAllocations}
           onReturn={(alloc) => setReturnTarget(alloc)}
           onTransfer={(alloc) =>
-            setTransferSeed({ assetId: alloc.assetId, heldBy: alloc.holderName })
+            setTransferSeed({ assetId: alloc.assetId, heldBy: alloc.holderName, allocationId: alloc.id })
           }
         />
       </section>
@@ -166,10 +123,6 @@ const AssetAllocation = () => {
   );
 };
 
-// =============================================================================
-// Overdue banner — surfaces the signal that feeds Dashboard + Notifications
-// =============================================================================
-
 const OverdueBanner = ({ overdue }) => {
   if (!overdue.length) return null;
   return (
@@ -180,7 +133,7 @@ const OverdueBanner = ({ overdue }) => {
         <ul>
           {overdue.map((a) => (
             <li key={a.id}>
-              <span className="mono">{a.asset?.tag}</span> {a.asset?.name} — held by {a.holderName},{' '}
+              <span className="mono">{a.asset?.assetTag}</span> {a.asset?.assetName} — held by {a.holderName},{' '}
               {overdueLabel(a.expectedReturnAt)}
             </li>
           ))}
@@ -190,28 +143,20 @@ const OverdueBanner = ({ overdue }) => {
   );
 };
 
-// =============================================================================
-// Allocate form — enforces the conflict rule
-// =============================================================================
-
 const AllocateForm = ({ state, onAllocated, onRequestTransfer }) => {
   const [assetId, setAssetId] = useState('');
-  const [holderType, setHolderType] = useState('USER');
   const [holderId, setHolderId] = useState('');
-  const [expectedReturnAt, setExpectedReturnAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
 
-  // Which asset is selected, and is it already held? Derived straight from
-  // props — no local mirror state — so the conflict rule can never go stale.
   const selectedAsset = state.assets.find((a) => a.id === Number(assetId)) || null;
   const conflict = useMemo(() => {
     if (!selectedAsset) return null;
     const active = state.activeAllocations.find((a) => a.assetId === selectedAsset.id);
-    return active ? { holderName: active.holderName, since: active.allocatedAt } : null;
+    return active ? { holderName: active.holderName, since: active.allocatedDate, allocationId: active.id } : null;
   }, [selectedAsset, state.activeAllocations]);
 
-  const holderOptions = holderType === 'USER' ? state.users : state.departments;
+  const holderOptions = state.users;
   const blocked = Boolean(conflict);
 
   const submit = async (e) => {
@@ -225,18 +170,12 @@ const AllocateForm = ({ state, onAllocated, onRequestTransfer }) => {
     try {
       await allocateAsset({
         assetId: Number(assetId),
-        holderType,
         holderId: Number(holderId),
-        expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt).toISOString() : null,
       });
-      // reset
       setAssetId('');
       setHolderId('');
-      setExpectedReturnAt('');
       await onAllocated();
     } catch (err) {
-      // Defensive: the submit button is disabled while `blocked`, so a
-      // ConflictError from the API is unexpected — surface its message.
       setFormError(err.message);
     } finally {
       setSubmitting(false);
@@ -257,13 +196,12 @@ const AllocateForm = ({ state, onAllocated, onRequestTransfer }) => {
           <option value="">Select an asset…</option>
           {state.assets.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.tag} · {a.name} ({a.status})
+              {a.assetTag} · {a.assetName} ({a.status})
             </option>
           ))}
         </select>
       </label>
 
-      {/* Conflict rule: an already-held asset can't be allocated — offer transfer instead. */}
       {blocked && (
         <div className="conflict-box" role="alert">
           <p>
@@ -274,30 +212,16 @@ const AllocateForm = ({ state, onAllocated, onRequestTransfer }) => {
           <button
             type="button"
             className="btn btn-amber"
-            onClick={() => onRequestTransfer({ assetId: selectedAsset.id, heldBy: conflict?.holderName })}
+            onClick={() => onRequestTransfer({ assetId: selectedAsset.id, heldBy: conflict?.holderName, allocationId: conflict.allocationId })}
           >
-            Request Transfer
+            Transfer Immediately
           </button>
         </div>
       )}
 
       <div className="field-row">
         <label className="field">
-          <span>Assign to</span>
-          <select
-            value={holderType}
-            onChange={(e) => {
-              setHolderType(e.target.value);
-              setHolderId('');
-            }}
-          >
-            <option value="USER">Employee</option>
-            <option value="DEPARTMENT">Department</option>
-          </select>
-        </label>
-
-        <label className="field">
-          <span>{holderType === 'USER' ? 'Employee' : 'Department'}</span>
+          <span>Assign to Employee</span>
           <select value={holderId} onChange={(e) => setHolderId(e.target.value)} disabled={blocked}>
             <option value="">Select…</option>
             {holderOptions.map((o) => (
@@ -309,16 +233,6 @@ const AllocateForm = ({ state, onAllocated, onRequestTransfer }) => {
         </label>
       </div>
 
-      <label className="field">
-        <span>Expected return date <em className="muted">(optional)</em></span>
-        <input
-          type="date"
-          value={expectedReturnAt}
-          onChange={(e) => setExpectedReturnAt(e.target.value)}
-          disabled={blocked}
-        />
-      </label>
-
       {formError && <p className="error-text">{formError}</p>}
 
       <button type="submit" className="btn btn-primary" disabled={submitting || blocked}>
@@ -327,75 +241,6 @@ const AllocateForm = ({ state, onAllocated, onRequestTransfer }) => {
     </form>
   );
 };
-
-// =============================================================================
-// Transfer requests panel — Requested -> Approved / Rejected
-// =============================================================================
-
-const TransfersPanel = ({ transfers, canApprove, actingUserId, onDecided }) => {
-  const [busyId, setBusyId] = useState(null);
-
-  if (!transfers.length) return <p className="muted">No transfer requests yet.</p>;
-
-  const decide = async (transferId, decision) => {
-    setBusyId(transferId);
-    try {
-      await decideTransfer({ transferId, decision, decidedById: actingUserId });
-      await onDecided();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const order = { REQUESTED: 0, APPROVED: 1, REJECTED: 2 };
-  const sorted = [...transfers].sort((a, b) => order[a.status] - order[b.status]);
-
-  return (
-    <ul className="transfer-list">
-      {sorted.map((t) => (
-        <li key={t.id} className={`transfer-item status-${t.status.toLowerCase()}`}>
-          <div className="transfer-main">
-            <p>
-              <span className="mono">{t.asset?.tag}</span> {t.asset?.name}
-            </p>
-            <p className="muted">
-              {t.fromHolderName} → <strong>{t.toHolderName}</strong> · requested by {t.requestedByName}
-            </p>
-            {t.note && <p className="note">“{t.note}”</p>}
-          </div>
-          <div className="transfer-side">
-            <StatusBadge status={t.status} />
-            {t.status === 'REQUESTED' && canApprove && (
-              <div className="btn-group">
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={busyId === t.id}
-                  onClick={() => decide(t.id, 'APPROVED')}
-                >
-                  Approve
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  disabled={busyId === t.id}
-                  onClick={() => decide(t.id, 'REJECTED')}
-                >
-                  Reject
-                </button>
-              </div>
-            )}
-            {t.status === 'REQUESTED' && !canApprove && (
-              <span className="muted small">Awaiting Manager / Dept. Head</span>
-            )}
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-};
-
-// =============================================================================
-// Current allocations table — overdue flag + return / transfer actions
-// =============================================================================
 
 const ActiveAllocationsTable = ({ allocations, onReturn, onTransfer }) => {
   if (!allocations.length) return <p className="muted">Nothing is allocated right now.</p>;
@@ -408,7 +253,6 @@ const ActiveAllocationsTable = ({ allocations, onReturn, onTransfer }) => {
             <th>Asset</th>
             <th>Held by</th>
             <th>Allocated</th>
-            <th>Expected return</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -416,14 +260,10 @@ const ActiveAllocationsTable = ({ allocations, onReturn, onTransfer }) => {
           {allocations.map((a) => (
             <tr key={a.id} className={a.overdue ? 'row-overdue' : ''}>
               <td>
-                <span className="mono">{a.asset?.tag}</span> {a.asset?.name}
+                <span className="mono">{a.asset?.assetTag}</span> {a.asset?.assetName}
               </td>
               <td>{a.holderName}</td>
-              <td>{fmtDate(a.allocatedAt)}</td>
-              <td>
-                {fmtDate(a.expectedReturnAt)}
-                {a.overdue && <span className="badge badge-red">{overdueLabel(a.expectedReturnAt)}</span>}
-              </td>
+              <td>{fmtDate(a.allocatedDate)}</td>
               <td>
                 <div className="btn-group">
                   <button className="btn btn-ghost btn-sm" onClick={() => onTransfer(a)}>
@@ -442,10 +282,6 @@ const ActiveAllocationsTable = ({ allocations, onReturn, onTransfer }) => {
   );
 };
 
-// =============================================================================
-// History table
-// =============================================================================
-
 const HistoryTable = ({ history }) => {
   if (!history.length) return <p className="muted">No returned or transferred allocations yet.</p>;
   return (
@@ -456,22 +292,20 @@ const HistoryTable = ({ history }) => {
             <th>Asset</th>
             <th>Held by</th>
             <th>Period</th>
-            <th>Condition</th>
-            <th>Check-in notes</th>
+            <th>Notes</th>
           </tr>
         </thead>
         <tbody>
           {history.map((a) => (
             <tr key={a.id}>
               <td>
-                <span className="mono">{a.asset?.tag}</span> {a.asset?.name}
+                <span className="mono">{a.asset?.assetTag}</span> {a.asset?.assetName}
               </td>
               <td>{a.holderName}</td>
               <td>
-                {fmtDate(a.allocatedAt)} → {fmtDate(a.returnedAt)}
+                {fmtDate(a.allocatedDate)} → {fmtDate(a.returnedDate)}
               </td>
-              <td>{a.returnCondition || '—'}</td>
-              <td className="muted">{a.returnNotes || '—'}</td>
+              <td className="muted">{a.reason || '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -479,10 +313,6 @@ const HistoryTable = ({ history }) => {
     </div>
   );
 };
-
-// =============================================================================
-// Return modal — capture condition + check-in notes
-// =============================================================================
 
 const ReturnModal = ({ allocation, onClose, onDone }) => {
   const [condition, setCondition] = useState(RETURN_CONDITIONS[0]);
@@ -506,7 +336,7 @@ const ReturnModal = ({ allocation, onClose, onDone }) => {
   return (
     <Modal title="Return / check-in asset" onClose={onClose}>
       <p className="muted">
-        <span className="mono">{allocation.asset?.tag}</span> {allocation.asset?.name} — held by {allocation.holderName}
+        <span className="mono">{allocation.asset?.assetTag}</span> {allocation.asset?.assetName} — held by {allocation.holderName}
       </p>
       <form onSubmit={submit}>
         <label className="field">
@@ -543,20 +373,14 @@ const ReturnModal = ({ allocation, onClose, onDone }) => {
   );
 };
 
-// =============================================================================
-// Transfer request modal
-// =============================================================================
-
 const TransferModal = ({ seed, state, actingUserId, onClose, onDone }) => {
   const asset = state.assets.find((a) => a.id === seed.assetId) || null;
-  const [toHolderType, setToHolderType] = useState('USER');
   const [toHolderId, setToHolderId] = useState('');
-  const [expectedReturnAt, setExpectedReturnAt] = useState('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
-  const options = toHolderType === 'USER' ? state.users : state.departments;
+  const options = state.users;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -568,11 +392,8 @@ const TransferModal = ({ seed, state, actingUserId, onClose, onDone }) => {
     setErr(null);
     try {
       await requestTransfer({
-        assetId: seed.assetId,
-        toHolderType,
+        allocationId: seed.allocationId,
         toHolderId: Number(toHolderId),
-        expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt).toISOString() : null,
-        requestedById: actingUserId,
         note,
       });
       await onDone();
@@ -583,28 +404,15 @@ const TransferModal = ({ seed, state, actingUserId, onClose, onDone }) => {
   };
 
   return (
-    <Modal title="Request transfer" onClose={onClose}>
+    <Modal title="Transfer Asset" onClose={onClose}>
       <p className="muted">
-        <span className="mono">{asset?.tag}</span> {asset?.name}
+        <span className="mono">{asset?.assetTag}</span> {asset?.assetName}
         {seed.heldBy && <> — currently held by <strong>{seed.heldBy}</strong></>}
       </p>
       <form onSubmit={submit}>
         <div className="field-row">
           <label className="field">
-            <span>Transfer to</span>
-            <select
-              value={toHolderType}
-              onChange={(e) => {
-                setToHolderType(e.target.value);
-                setToHolderId('');
-              }}
-            >
-              <option value="USER">Employee</option>
-              <option value="DEPARTMENT">Department</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>{toHolderType === 'USER' ? 'Employee' : 'Department'}</span>
+            <span>Transfer to Employee</span>
             <select value={toHolderId} onChange={(e) => setToHolderId(e.target.value)}>
               <option value="">Select…</option>
               {options.map((o) => (
@@ -616,38 +424,25 @@ const TransferModal = ({ seed, state, actingUserId, onClose, onDone }) => {
           </label>
         </div>
         <label className="field">
-          <span>Expected return date <em className="muted">(optional)</em></span>
-          <input type="date" value={expectedReturnAt} onChange={(e) => setExpectedReturnAt(e.target.value)} />
-        </label>
-        <label className="field">
           <span>Reason / note</span>
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         {err && <p className="error-text">{err}</p>}
         <p className="muted small">
-          A request is created as <strong>Requested</strong>; a Manager / Dept. Head approves it, then the asset is
-          re-allocated and history updates automatically.
+          Asset will be immediately transferred.
         </p>
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
           <button type="submit" className="btn btn-amber" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit transfer request'}
+            {submitting ? 'Submitting…' : 'Transfer Now'}
           </button>
         </div>
       </form>
     </Modal>
   );
 };
-
-// =============================================================================
-// Shared bits
-// =============================================================================
-
-const StatusBadge = ({ status }) => (
-  <span className={`badge badge-status status-${status.toLowerCase()}`}>{status}</span>
-);
 
 const Modal = ({ title, children, onClose }) => (
   <div className="modal-overlay" onClick={onClose}>

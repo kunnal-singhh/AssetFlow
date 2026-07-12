@@ -457,91 +457,43 @@ function App() {
     return localStorage.getItem('af_current_role') || 'Admin';
   });
 
-  const [departments, setDepartments] = useState(() => {
-    const saved = localStorage.getItem('af_departments');
-    return saved ? JSON.parse(saved) : initialDepartments;
-  });
+  const [departments, setDepartments] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [maintenance, setMaintenance] = useState([]);
+  const [auditCycles, setAuditCycles] = useState([]);
+  const [transfers, setTransfers] = useState([]);
 
-  const [categories, setCategories] = useState(() => {
-    const saved = localStorage.getItem('af_categories');
-    return saved ? JSON.parse(saved) : initialCategories;
-  });
-
-  const [employees, setEmployees] = useState(() => {
-    const saved = localStorage.getItem('af_employees');
-    return saved ? JSON.parse(saved) : initialEmployees;
-  });
-
-  const [assets, setAssets] = useState(() => {
-    const saved = localStorage.getItem('af_assets');
-    return saved ? JSON.parse(saved) : initialAssets;
-  });
-
-  const [activity, setActivity] = useState(() => {
-    const saved = localStorage.getItem('af_activity');
-    return saved ? JSON.parse(saved) : initialActivity;
-  });
-
-  const [bookings, setBookings] = useState(() => {
-    const saved = localStorage.getItem('af_bookings');
-    return saved ? JSON.parse(saved) : initialBookings;
-  });
-
-  const [maintenance, setMaintenance] = useState(() => {
-    const saved = localStorage.getItem('af_maintenance');
-    return saved ? JSON.parse(saved) : initialMaintenance;
-  });
-
-  const [auditCycles, setAuditCycles] = useState(() => {
-    const saved = localStorage.getItem('af_audit_cycles');
-    return saved ? JSON.parse(saved) : initialAuditCycles;
-  });
-
-  const [transfers, setTransfers] = useState(() => {
-    const saved = localStorage.getItem('af_transfers');
-    return saved ? JSON.parse(saved) : initialTransfers;
-  });
-
-  // Sync to localStorage
   useEffect(() => {
     localStorage.setItem('af_current_role', currentRole);
   }, [currentRole]);
 
-  useEffect(() => {
-    localStorage.setItem('af_departments', JSON.stringify(departments));
-  }, [departments]);
+  const loadGlobalState = () => {
+    if (isAuthenticated) {
+      Promise.all([
+        import('./api/departmentApi').then(m => m.getDepartments()),
+        import('./api/categoryApi').then(m => m.getCategories()),
+        import('./api/userApi').then(m => m.getUsers()),
+        import('./api/assetApi').then(m => m.getAssets()),
+        import('./api/bookingApi').then(m => m.getBookings()),
+        import('./api/maintenanceApi').then(m => m.getMaintenance())
+      ]).then(([deps, cats, users, asts, bks, mnts]) => {
+        setDepartments(deps.data?.departments || deps.departments || []);
+        setCategories(cats.data?.categories || cats.categories || []);
+        setEmployees(users.data?.users || users.users || []);
+        setAssets(asts.data?.assets || asts.assets || []);
+        setBookings(bks.data?.bookings || bks.bookings || []);
+        setMaintenance(mnts.data?.maintenance || mnts.maintenance || []);
+      }).catch(console.error);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem('af_categories', JSON.stringify(categories));
-  }, [categories]);
-
-  useEffect(() => {
-    localStorage.setItem('af_employees', JSON.stringify(employees));
-  }, [employees]);
-
-  useEffect(() => {
-    localStorage.setItem('af_assets', JSON.stringify(assets));
-  }, [assets]);
-
-  useEffect(() => {
-    localStorage.setItem('af_activity', JSON.stringify(activity));
-  }, [activity]);
-
-  useEffect(() => {
-    localStorage.setItem('af_bookings', JSON.stringify(bookings));
-  }, [bookings]);
-
-  useEffect(() => {
-    localStorage.setItem('af_maintenance', JSON.stringify(maintenance));
-  }, [maintenance]);
-
-  useEffect(() => {
-    localStorage.setItem('af_audit_cycles', JSON.stringify(auditCycles));
-  }, [auditCycles]);
-
-  useEffect(() => {
-    localStorage.setItem('af_transfers', JSON.stringify(transfers));
-  }, [transfers]);
+    loadGlobalState();
+  }, [isAuthenticated]);
 
   // Helpers to add or update records
   const addDepartment = (dept) => {
@@ -747,24 +699,28 @@ function App() {
         currentRole,
         setCurrentRole,
         departments,
-        addDepartment,
-        updateDepartment,
         categories,
-        addCategory,
-        updateCategory,
         employees,
-        addEmployee,
-        updateEmployee,
         assets,
-        registerAsset,
         activity,
         bookings,
-        createBooking,
         maintenance,
-        createMaintenanceRequest,
         auditCycles,
-        addAuditCycle,
         transfers,
+        authUser,
+        handleLogout,
+        loadGlobalState,
+        // Exposing setter methods (which can now also call loadGlobalState or API if needed)
+        addDepartment,
+        updateDepartment,
+        addCategory,
+        updateCategory,
+        addEmployee,
+        updateEmployee,
+        registerAsset,
+        createBooking,
+        createMaintenanceRequest,
+        addAuditCycle,
         requestTransfer,
         approveTransfer,
         returnAsset,

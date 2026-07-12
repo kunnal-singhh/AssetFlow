@@ -147,29 +147,19 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * ```
  */
 export async function signup({ email, password, name }) {
-  await delay(MOCK_LATENCY);
-
-  // Check duplicate email (mock)
-  if (mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
-    throw new Error('An account with this email already exists.');
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Signup failed');
   }
-
-  const newUser = {
-    id: ++mockIdSeq,
-    email,
-    password, // ⚠️ Only in mock — backend hashes with bcrypt
-    name,
-    role: 'EMPLOYEE', // Default role; admin promotes later
-  };
-  mockUsers.push(newUser);
-
-  const token = fakeMockToken(newUser.id);
-  const user = { id: newUser.id, email: newUser.email, name: newUser.name, role: newUser.role };
-
-  setStoredToken(token);
-  setStoredUser(user);
-
-  return { user, token };
+  const data = await res.json();
+  setStoredToken(data.token);
+  setStoredUser(data.user);
+  return data;
 }
 
 /**
@@ -196,23 +186,19 @@ export async function signup({ email, password, name }) {
  * ```
  */
 export async function login({ email, password }) {
-  await delay(MOCK_LATENCY);
-
-  const found = mockUsers.find(
-    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-  );
-
-  if (!found) {
-    throw new Error('Invalid email or password.');
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Invalid credentials');
   }
-
-  const token = fakeMockToken(found.id);
-  const user = { id: found.id, email: found.email, name: found.name, role: found.role };
-
-  setStoredToken(token);
-  setStoredUser(user);
-
-  return { user, token };
+  const data = await res.json();
+  setStoredToken(data.token);
+  setStoredUser(data.user);
+  return data;
 }
 
 /**
@@ -231,7 +217,13 @@ export async function login({ email, password }) {
  * ```
  */
 export async function logout() {
-  await delay(200);
+  const token = getStoredToken();
+  if (token) {
+    await fetch(`${API_BASE}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
   clearStoredToken();
 }
 
@@ -259,17 +251,19 @@ export async function logout() {
  * ```
  */
 export async function checkSession() {
-  await delay(300);
-
   const token = getStoredToken();
-  const user = getStoredUser();
+  if (!token) return null;
 
-  if (token && user) {
-    return { user };
+  const res = await fetch(`${API_BASE}/api/auth/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    clearStoredToken();
+    return null;
   }
-
-  clearStoredToken();
-  return null;
+  const data = await res.json();
+  setStoredUser(data.user);
+  return data;
 }
 
 /**
@@ -293,8 +287,14 @@ export async function checkSession() {
  * ```
  */
 export async function forgotPassword({ email }) {
-  await delay(MOCK_LATENCY);
-
-  // In the mock we just pretend it worked
-  return { message: `If an account exists for ${email}, a reset link has been sent.` };
+  const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Failed to send reset email');
+  }
+  return await res.json();
 }

@@ -451,11 +451,11 @@ function BookingFormModal({ resource, dateStr, allBookings, currentUser, onClose
 const ResourceBooking = () => {
   const {
     bookings,
-    createBooking,   // (bookingData) => void — adds to context & activity log
     assets,
     currentRole,
     employees,
     logActivity,
+    loadGlobalState,
   } = useContext(AppContext);
 
   // ---- Local state --------------------------------------------------------
@@ -513,50 +513,42 @@ const ResourceBooking = () => {
 
   // ---- Handlers -----------------------------------------------------------
 
-  /**
-   * Cancel a booking locally + log activity.
-   * TODO (Backend): PATCH /api/bookings/:id  { status: "Cancelled" }
-   */
-  function handleCancel(bookingId) {
-    setLocalBookings(prev =>
-      prev.map(b => b.id === bookingId ? { ...b, status: 'Cancelled' } : b)
-    );
-    const target = localBookings.find(b => b.id === bookingId);
-    if (target) logActivity('booking', `Booking for ${target.assetName} by ${target.bookedBy} cancelled.`);
+  async function handleCancel(bookingId) {
+    try {
+      await import('../api/bookingApi').then(m => m.updateBooking(bookingId, { status: 'Cancelled' }));
+      const target = localBookings.find(b => b.id === bookingId);
+      if (target) logActivity('booking', `Booking for ${target.assetName} by ${target.bookedBy} cancelled.`);
+      await loadGlobalState();
+    } catch (e) {
+      console.error('Failed to cancel booking', e);
+    }
   }
 
-  /**
-   * Reschedule a booking locally + log activity.
-   * TODO (Backend): PATCH /api/bookings/:id  { startTime, endTime }
-   *                 Server must re-check overlap before accepting.
-   */
-  function handleReschedule(bookingId, newStart, newEnd) {
-    setLocalBookings(prev =>
-      prev.map(b =>
-        b.id === bookingId ? { ...b, startTime: newStart, endTime: newEnd } : b
-      )
-    );
-    const target = localBookings.find(b => b.id === bookingId);
-    if (target) logActivity('booking', `Booking for ${target.assetName} rescheduled to ${fmtTime(newStart)} – ${fmtTime(newEnd)}.`);
+  async function handleReschedule(bookingId, newStart, newEnd) {
+    try {
+      await import('../api/bookingApi').then(m => m.updateBooking(bookingId, { startTime: new Date(newStart).toISOString(), endTime: new Date(newEnd).toISOString() }));
+      const target = localBookings.find(b => b.id === bookingId);
+      if (target) logActivity('booking', `Booking for ${target.assetName} rescheduled to ${fmtTime(newStart)} – ${fmtTime(newEnd)}.`);
+      await loadGlobalState();
+    } catch (e) {
+      console.error('Failed to reschedule booking', e);
+    }
   }
 
-  /**
-   * Create a new booking.
-   * Delegates to App.jsx's createBooking (which updates context + activity log).
-   * TODO (Backend): POST /api/bookings — see BookingFormModal for full shape.
-   */
-  function handleBook(bookingData) {
-    // Map bookedBy → userName to match the existing createBooking contract in App.jsx.
-    // TODO (Backend): Standardize to a single field name (e.g. "bookedBy") once the
-    //   API is in place. Update App.jsx createBooking and all related context consumers.
-    const newB = {
-      ...bookingData,
-      id: Date.now(),
-      userName: bookingData.bookedBy,   // compatibility alias for createBooking
-    };
-    createBooking(newB);
-    // Also keep local copy in sync so the timeline updates instantly
-    setLocalBookings(prev => [...prev, newB]);
+  async function handleBook(bookingData) {
+    try {
+      const payload = {
+        assetId: sharedAssets.find(a => a.tag === bookingData.assetTag)?.id,
+        employeeId: employees.find(e => e.name === bookingData.bookedBy)?.id || 1, // fallback
+        startTime: new Date(bookingData.startTime).toISOString(),
+        endTime: new Date(bookingData.endTime).toISOString(),
+      };
+      await import('../api/bookingApi').then(m => m.createBooking(payload));
+      logActivity('booking', `Booking for ${bookingData.assetName} by ${bookingData.bookedBy} confirmed.`);
+      await loadGlobalState();
+    } catch (e) {
+      console.error('Failed to create booking', e);
+    }
   }
 
   // ---- Render -------------------------------------------------------------
