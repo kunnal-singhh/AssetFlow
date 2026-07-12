@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import AssetInventory from './components/AssetInventory';
 import AuditView from './components/AuditView';
 import BookingMaintenance from './components/BookingMaintenance';
+import AssetAllocation from './components/AssetAllocation';
 import OrganizationSetup from './components/OrganizationSetup';
 import { ReportsAnalytics, ActivityLogs } from './components/audit-analytics';
 
@@ -255,6 +256,8 @@ function NavigationAndSidebar() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/setup" element={<OrganizationSetup />} />
             <Route path="/assets" element={<AssetInventory />} />
+            <Route path="/allocations" element={<AssetAllocation />} />
+            <Route path="/audits" element={<AuditView />} />
             <Route path="/allocations" element={<div className="p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center"><h2 className="text-xl font-bold text-zinc-200 mb-2">Asset Allocation & Transfer</h2><p className="text-zinc-500">Manage asset transfers and handovers here. Currently using the quick action panel on the Dashboard.</p></div>} />
             <Route path="/bookings" element={<BookingMaintenance />} />
             <Route path="/maintenance" element={<div className="p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center"><h2 className="text-xl font-bold text-zinc-200 mb-2">Maintenance Management</h2><p className="text-zinc-500">Route repairs and inspect assets. Access this using the "Raise Request" action on the Dashboard.</p></div>} />
