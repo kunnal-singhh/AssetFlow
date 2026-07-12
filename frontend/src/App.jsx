@@ -9,6 +9,14 @@ import AssetAllocation from './components/AssetAllocation';
 import OrganizationSetup from './components/OrganizationSetup';
 import MaintenanceManagement from './components/MaintenanceManagement';
 import { ReportsAnalytics, ActivityLogs } from './components/audit-analytics';
+import LoginSignup from './components/LoginSignup';
+
+/**
+ * TODO (Backend): Import checkSession and logout from authApi once the
+ * backend auth endpoints are live. These are used to restore sessions
+ * on page refresh and handle logout from the sidebar.
+ */
+import { checkSession, logout, getStoredUser } from './api/authApi';
 
 // Create the shared state context
 export const AppContext = createContext();
@@ -39,11 +47,21 @@ const initialEmployees = [
 ];
 
 const initialAssets = [
-  { id: 1, tag: 'AF-0114', name: 'MacBook Pro 16"', category: 'Electronics', serial: 'SN-X987342', acquisitionDate: '2025-10-12', acquisitionCost: 2400, condition: 'Excellent', location: 'HQ - 4th Floor', shared: false, status: 'Allocated', department: 'Engineering', employee: 'Priya Shah', expectedReturnDate: '2026-07-10' }, // Overdue
-  { id: 2, tag: 'AF-0062', name: 'Epson Projector 4K', category: 'Electronics', serial: 'SN-P293847', acquisitionDate: '2025-05-15', acquisitionCost: 950, condition: 'Good', location: 'Conf Room B2', shared: true, status: 'Available', department: '-', employee: '-', expectedReturnDate: '' },
-  { id: 3, tag: 'AF-0099', name: 'Tesla Model 3', category: 'Vehicles', serial: 'SN-V827384', acquisitionDate: '2024-03-20', acquisitionCost: 35000, condition: 'Good', location: 'HQ Parking', shared: true, status: 'Under Maintenance', department: 'Field Ops', employee: '-', expectedReturnDate: '' },
-  { id: 4, tag: 'AF-0105', name: 'Ergonomic Desk Chair', category: 'Furniture', serial: 'SN-C482938', acquisitionDate: '2025-01-10', acquisitionCost: 350, condition: 'Excellent', location: 'HQ - 3rd Floor', shared: false, status: 'Allocated', department: 'Facilities', employee: 'Rohan Mehta', expectedReturnDate: '2026-07-05' }, // Overdue
-  { id: 5, tag: 'AF-0122', name: 'Dell UltraSharp 32"', category: 'Electronics', serial: 'SN-M384729', acquisitionDate: '2025-11-01', acquisitionCost: 700, condition: 'Good', location: 'HQ - 4th Floor', shared: false, status: 'Allocated', department: 'Engineering', employee: 'aditi rao', expectedReturnDate: '2026-07-01' }  // Overdue
+  { id: 1, tag: 'AF-0012', name: 'Dell Laptop', category: 'Electronics', serial: 'SN-DL4829', acquisitionDate: '2025-10-12', acquisitionCost: 1500, condition: 'Excellent', location: 'Bengaluru', shared: false, status: 'Allocated', department: 'Engineering', employee: 'Priya Shah', expectedReturnDate: '2026-07-10', history: [
+    { id: 1, event: 'Asset registered by Kunal Singh', date: '2025-10-12' },
+    { id: 2, event: 'Allocated to Priya Shah (Engineering)', date: '2025-10-15' }
+  ]},
+  { id: 2, tag: 'AF-0062', name: 'Projector', category: 'Electronics', serial: 'SN-PJ9384', acquisitionDate: '2025-05-15', acquisitionCost: 800, condition: 'Good', location: 'HQ Floor 2', shared: true, status: 'Under Maintenance', department: '-', employee: '-', expectedReturnDate: '', history: [
+    { id: 1, event: 'Asset registered by Vikram Seth', date: '2025-05-15' },
+    { id: 2, event: 'Moved to Under Maintenance (Diagnostics)', date: '2026-07-12' }
+  ]},
+  { id: 3, tag: 'AF-0201', name: 'Office Chair', category: 'Furniture', serial: 'SN-OC2839', acquisitionDate: '2025-02-18', acquisitionCost: 250, condition: 'Excellent', location: 'Warehouse', shared: false, status: 'Available', department: 'Facilities', employee: '-', expectedReturnDate: '', history: [
+    { id: 1, event: 'Asset registered by Kunal Singh', date: '2025-02-18' }
+  ]},
+  { id: 4, tag: 'AF-0099', name: 'Tesla Model 3', category: 'Vehicles', serial: 'SN-TM384', acquisitionDate: '2024-03-20', acquisitionCost: 40000, condition: 'Good', location: 'Parking Slot C', shared: true, status: 'Available', department: '-', employee: '-', expectedReturnDate: '', history: [
+    { id: 1, event: 'Asset registered by Vikram Seth', date: '2024-03-20' },
+    { id: 2, event: 'Assigned to Parking Slot C', date: '2024-03-22' }
+  ]}
 ];
 
 const initialActivity = [
@@ -89,7 +107,7 @@ function SidebarLink({ to, label, icon }) {
 }
 
 function NavigationAndSidebar() {
-  const { currentRole, setCurrentRole, assets } = React.useContext(AppContext);
+  const { currentRole, setCurrentRole, assets, authUser, handleLogout } = React.useContext(AppContext);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,6 +207,14 @@ function NavigationAndSidebar() {
               <p className="text-[10px] text-zinc-500 truncate">{currentRole}</p>
             </div>
           </div>
+          {/* Logout button */}
+          <button
+            onClick={handleLogout}
+            className="mt-3 w-full flex items-center justify-center space-x-2 px-3 py-2 bg-zinc-950 border border-zinc-800 text-zinc-400 text-xs font-semibold rounded-lg hover:bg-red-950/30 hover:text-red-400 hover:border-red-900/50 transition-all cursor-pointer"
+          >
+            <span>🚪</span>
+            <span>Sign Out</span>
+          </button>
         </div>
       </aside>
 
@@ -369,6 +395,64 @@ function NavigationAndSidebar() {
 }
 
 function App() {
+  // ─── Authentication state ──────────────────────────────────────────────
+  //
+  // TODO (Backend): When the backend auth is live, `authUser` will hold
+  // the user object returned by GET /api/auth/me (or POST /api/auth/login).
+  // The `currentRole` can then be derived from `authUser.role` instead of
+  // the simulated role switcher.
+  //
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true); // true while checking session
+
+  /**
+   * On mount, check if a previous session (token + user) exists in
+   * localStorage. If valid, skip the login screen.
+   *
+   * TODO (Backend): When the real GET /api/auth/me endpoint exists,
+   * `checkSession` will validate the token server-side instead of
+   * just reading localStorage.
+   */
+  useEffect(() => {
+    checkSession()
+      .then((result) => {
+        if (result && result.user) {
+          setAuthUser(result.user);
+          setIsAuthenticated(true);
+        }
+      })
+      .catch(() => {
+        // Token invalid or expired — stay on login screen
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  /**
+   * Called by LoginSignup after a successful login or signup.
+   * Receives the user object from authApi and transitions to the app.
+   *
+   * TODO (Backend): Once role comes from the backend JWT, set
+   * currentRole from user.role here:
+   *   setCurrentRole(mapBackendRoleToUIRole(user.role));
+   */
+  const handleAuthSuccess = (user) => {
+    setAuthUser(user);
+    setIsAuthenticated(true);
+  };
+
+  /**
+   * Log out: clear auth state and return to login screen.
+   *
+   * TODO (Backend): `logout()` in authApi.js will call
+   * POST /api/auth/logout to invalidate the token server-side.
+   */
+  const handleLogout = async () => {
+    await logout();
+    setAuthUser(null);
+    setIsAuthenticated(false);
+  };
+
   const [currentRole, setCurrentRole] = useState(() => {
     return localStorage.getItem('af_current_role') || 'Admin';
   });
@@ -492,7 +576,15 @@ function App() {
 
   const registerAsset = (asset) => {
     const newTag = `AF-${String(assets.length + 100).padStart(4, '0')}`;
-    const newAsset = { ...asset, id: Date.now(), tag: newTag, status: 'Available', employee: '-', expectedReturnDate: '' };
+    const newAsset = { 
+      ...asset, 
+      id: Date.now(), 
+      tag: newTag, 
+      status: 'Available', 
+      employee: '-', 
+      expectedReturnDate: '',
+      history: [{ id: Date.now(), event: 'Asset registered by Kunal Singh', date: new Date().toISOString().split('T')[0] }]
+    };
     setAssets((prev) => [...prev, newAsset]);
     logActivity('registration', `Registered new asset ${newAsset.name} (Tag: ${newTag}) in ${asset.location}`);
   };
@@ -503,7 +595,18 @@ function App() {
     // Find asset and allocate it
     setAssets((prev) =>
       prev.map((a) =>
-        a.tag === booking.assetTag ? { ...a, status: 'Allocated', employee: booking.userName, expectedReturnDate: booking.endTime.split('T')[0] } : a
+        a.tag === booking.assetTag 
+          ? { 
+              ...a, 
+              status: 'Allocated', 
+              employee: booking.userName, 
+              expectedReturnDate: booking.endTime.split('T')[0],
+              history: [
+                ...(a.history || []),
+                { id: Date.now(), event: `Allocated to ${booking.userName}`, date: new Date().toISOString().split('T')[0] }
+              ]
+            } 
+          : a
       )
     );
     logActivity('booking', `${booking.assetName} - booking confirmed for ${booking.userName}`);
@@ -514,7 +617,18 @@ function App() {
     setMaintenance((prev) => [...prev, newReq]);
     // Set asset to Under Maintenance
     setAssets((prev) =>
-      prev.map((a) => (a.tag === request.assetTag ? { ...a, status: 'Under Maintenance' } : a))
+      prev.map((a) => 
+        a.tag === request.assetTag 
+          ? { 
+              ...a, 
+              status: 'Under Maintenance',
+              history: [
+                ...(a.history || []),
+                { id: Date.now(), event: `Moved to Under Maintenance: ${request.description}`, date: new Date().toISOString().split('T')[0] }
+              ]
+            } 
+          : a
+      )
     );
     logActivity('maintenance', `${request.assetName} (${request.assetTag}) - maintenance requested: ${request.description}`);
   };
@@ -538,7 +652,18 @@ function App() {
     // Allocate asset to requester
     setAssets((prev) =>
       prev.map((a) =>
-        a.tag === target.assetTag ? { ...a, employee: target.requester, department: target.department, status: 'Allocated' } : a
+        a.tag === target.assetTag 
+          ? { 
+              ...a, 
+              employee: target.requester, 
+              department: target.department, 
+              status: 'Allocated',
+              history: [
+                ...(a.history || []),
+                { id: Date.now(), event: `Transfer approved. Allocated to ${target.requester}`, date: new Date().toISOString().split('T')[0] }
+              ]
+            } 
+          : a
       )
     );
 
@@ -557,7 +682,18 @@ function App() {
     setAssets((prev) =>
       prev.map((a) =>
         a.tag === assetTag
-          ? { ...a, status: 'Available', employee: '-', department: '-', expectedReturnDate: '', condition: notes || a.condition }
+          ? { 
+              ...a, 
+              status: 'Available', 
+              employee: '-', 
+              department: '-', 
+              expectedReturnDate: '', 
+              condition: notes || a.condition,
+              history: [
+                ...(a.history || []),
+                { id: Date.now(), event: `Returned by user. Notes: ${notes || 'Good'}`, date: new Date().toISOString().split('T')[0] }
+              ]
+            }
           : a
       )
     );
@@ -574,6 +710,36 @@ function App() {
     };
     setActivity((prev) => [newAct, ...prev]);
   };
+
+  // ─── Auth loading splash ──────────────────────────────────────────────
+  // Show a minimal loading indicator while we verify the stored session
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', width: '100vw', background: '#09090b'
+      }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: '50%',
+          border: '3px solid rgba(16,185,129,0.2)',
+          borderTopColor: '#10b981',
+          animation: 'spin 0.7s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ─── Auth gate: show Login/Signup when not authenticated ─────────────
+  //
+  // TODO (Backend): Once protected routes are enforced server-side,
+  // this client-side gate ensures the UI never renders the dashboard
+  // without a valid token. Add a 401/403 interceptor in your fetch
+  // wrapper to call handleLogout() when a token expires mid-session.
+  //
+  if (!isAuthenticated) {
+    return <LoginSignup onAuthSuccess={handleAuthSuccess} />;
+  }
 
   return (
     <AppContext.Provider
@@ -602,7 +768,16 @@ function App() {
         requestTransfer,
         approveTransfer,
         returnAsset,
-        logActivity
+        logActivity,
+        // ── Auth context ──
+        // Expose auth data so any child component can access the
+        // logged-in user or trigger logout.
+        //
+        // TODO (Backend): Components that need the real user object
+        // (e.g., to display the logged-in user's name/role in the
+        // header) should read `authUser` from context.
+        authUser,
+        handleLogout,
       }}
     >
       <Router>

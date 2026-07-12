@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useContext, useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, FileText, Search, Settings } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, FileText, Search, ShieldX } from 'lucide-react';
 import { AppContext } from '../../App';
 
 export default function AssetAuditWorkspace() {
   const { assets, auditCycles, logActivity } = useContext(AppContext);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Use local state to track verification status for this active session
   // Initialize from global assets context
   const [auditItems, setAuditItems] = useState([]);
@@ -31,8 +31,8 @@ export default function AssetAuditWorkspace() {
     alert('Audit cycle closed! Discrepancies logged to activity tracker.');
   };
 
-  const filteredItems = auditItems.filter(item => 
-    (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) || 
+  const filteredItems = auditItems.filter(item =>
+    (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (item.tag && item.tag.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -52,7 +52,7 @@ export default function AssetAuditWorkspace() {
           <h1 className="text-2xl font-bold text-zinc-100">Asset Audit Workspace</h1>
           <p className="text-sm text-zinc-400">Active Cycle: <span className="font-semibold text-emerald-400">{activeAudit.name}</span></p>
         </div>
-        <button 
+        <button
           className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded-lg flex items-center transition-all shadow-lg shadow-emerald-900/20 cursor-pointer"
           onClick={handleCloseAudit}
         >
@@ -94,14 +94,14 @@ export default function AssetAuditWorkspace() {
         <div className="p-5 border-b border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-950/30">
           <h2 className="text-lg font-bold text-zinc-200">Verification Checklist</h2>
           <div className="relative w-full sm:w-64">
-             <Search className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
-             <input 
-               type="text" 
-               placeholder="Search Tag or Name..." 
-               className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-full pl-9 pr-4 py-2 focus:outline-none focus:border-emerald-500 transition-all placeholder-zinc-600"
-               value={searchQuery}
-               onChange={(e) => setSearchQuery(e.target.value)}
-             />
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Search Tag or Name..."
+              className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-full pl-9 pr-4 py-2 focus:outline-none focus:border-emerald-500 transition-all placeholder-zinc-600"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
 
@@ -132,26 +132,26 @@ export default function AssetAuditWorkspace() {
                   </td>
                   <td className="px-5 py-4 text-center">
                     <div className="inline-flex rounded-md shadow-sm border border-zinc-800 overflow-hidden bg-zinc-950" role="group">
-                      <button 
+                      <button
                         className={`p-2 transition-colors cursor-pointer ${item.verificationStatus === 'Verified' ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                         onClick={() => handleStatusChange(item.id, 'Verified')}
                         title="Mark Verified"
                       >
                         <CheckCircle className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         className={`p-2 border-l border-zinc-800 transition-colors cursor-pointer ${item.verificationStatus === 'Missing' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                         onClick={() => handleStatusChange(item.id, 'Missing')}
                         title="Mark Missing"
                       >
                         <XCircle className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         className={`p-2 border-l border-zinc-800 transition-colors cursor-pointer ${item.verificationStatus === 'Damaged' ? 'bg-amber-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                         onClick={() => handleStatusChange(item.id, 'Damaged')}
                         title="Mark Damaged"
                       >
-                        <Settings className="w-4 h-4" />
+                        <ShieldX className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
