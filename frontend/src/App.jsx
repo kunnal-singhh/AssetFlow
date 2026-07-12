@@ -140,18 +140,18 @@ function NavigationAndSidebar() {
     setSearchResults([]);
   };
 
-  // Get active name based on simulated role
+  // Get active name based on actual authenticated user
   const getLoggedInUser = () => {
-    switch (currentRole) {
-      case 'Admin': return { name: 'Kunal Singh', email: 'kunal.singh@assetflow.com' };
-      case 'Asset Manager': return { name: 'Vikram Seth', email: 'vikram.seth@assetflow.com' };
-      case 'Department Head': return { name: 'Aditi Rao', email: 'aditi.rao@assetflow.com' };
-      case 'Employee': return { name: 'Priya Shah', email: 'priya.shah@assetflow.com' };
-      default: return { name: 'Kunal Singh', email: 'kunal.singh@assetflow.com' };
+    if (authUser) {
+      return { name: authUser.name, email: authUser.email, role: authUser.role };
     }
+    return { name: 'User', email: '', role: 'EMPLOYEE' };
   };
 
   const loggedIn = getLoggedInUser();
+  const isAdmin = loggedIn.role === 'ADMIN';
+  const isManager = loggedIn.role === 'MANAGER';
+  const canManageAssets = isAdmin || isManager;
 
   return (
     <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden relative">
@@ -181,40 +181,30 @@ function NavigationAndSidebar() {
           {/* Navigation Links */}
           <nav className="px-3 py-6 space-y-1">
             <SidebarLink to="/" label="Dashboard" icon="📊" onClick={closeMobileMenu} />
-            <SidebarLink to="/setup" label="Organization setup" icon="🏢" onClick={closeMobileMenu} />
-            <SidebarLink to="/assets" label="Assets" icon="📦" onClick={closeMobileMenu} />
-            <SidebarLink to="/allocations" label="Allocation & Transfer" icon="🔄" onClick={closeMobileMenu} />
+            {isAdmin && <SidebarLink to="/setup" label="Organization setup" icon="🏢" onClick={closeMobileMenu} />}
+            {canManageAssets && <SidebarLink to="/assets" label="Assets" icon="📦" onClick={closeMobileMenu} />}
+            {canManageAssets && <SidebarLink to="/allocations" label="Allocation & Transfer" icon="🔄" onClick={closeMobileMenu} />}
             <SidebarLink to="/bookings" label="Resource Booking" icon="📅" onClick={closeMobileMenu} />
             <SidebarLink to="/maintenance" label="Maintenance" icon="🛠️" onClick={closeMobileMenu} />
-            <SidebarLink to="/audits" label="Audit" icon="📋" onClick={closeMobileMenu} />
-            <SidebarLink to="/reports" label="Reports" icon="📈" onClick={closeMobileMenu} />
+            {canManageAssets && <SidebarLink to="/audits" label="Audit" icon="📋" onClick={closeMobileMenu} />}
+            {canManageAssets && <SidebarLink to="/reports" label="Reports" icon="📈" onClick={closeMobileMenu} />}
             <SidebarLink to="/notifications" label="Notifications" icon="🔔" onClick={closeMobileMenu} />
           </nav>
         </div>
 
-        {/* User Info / Role Swapper */}
+        {/* User Info */}
         <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/40">
           <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-            <span>Simulate User Role</span>
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Current User</span>
+            <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
           </div>
-          <select
-            value={currentRole}
-            onChange={(e) => setCurrentRole(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer font-medium"
-          >
-            <option value="Admin">Admin (Kunal S.)</option>
-            <option value="Asset Manager">Asset Manager (Vikram S.)</option>
-            <option value="Department Head">Dept Head (Aditi R.)</option>
-            <option value="Employee">Employee (Priya S.)</option>
-          </select>
           <div className="mt-3 flex items-center space-x-3 px-1">
             <div className="w-8 h-8 rounded-full bg-emerald-800 flex items-center justify-center font-semibold text-xs text-emerald-200 uppercase">
               {loggedIn.name[0] || 'U'}
             </div>
             <div className="overflow-hidden">
               <p className="text-xs font-semibold text-zinc-200 truncate">{loggedIn.name}</p>
-              <p className="text-[10px] text-zinc-500 truncate">{currentRole}</p>
+              <p className="text-[10px] text-zinc-500 truncate">{loggedIn.role}</p>
             </div>
           </div>
           {/* Logout button */}
@@ -246,7 +236,7 @@ function NavigationAndSidebar() {
             </span>
             <span className="text-zinc-700 hidden sm:inline-block">|</span>
             <h2 className="text-xs font-bold text-zinc-400 tracking-wide">
-              {currentRole} Console
+              {loggedIn.role} Console
             </h2>
           </div>
 
