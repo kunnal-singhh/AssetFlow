@@ -16,6 +16,9 @@ const OrganizationSetup = () => {
   } = useContext(AppContext);
 
   const [activeTab, setActiveTab] = useState('departments'); // 'departments' | 'categories' | 'employees'
+  const [viewHierarchy, setViewHierarchy] = useState(false); // Toggle tree view for departments
+  const [selectedDeptIds, setSelectedDeptIds] = useState([]); // Bulk actions checkboxes
+  const [bulkAction, setBulkAction] = useState('');
 
   // Modal open states
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
@@ -33,6 +36,11 @@ const OrganizationSetup = () => {
   const [empForm, setEmpForm] = useState({ name: '', email: '', department: '-', role: 'Employee', status: 'Active' });
 
   const isAdmin = currentRole === 'Admin';
+
+  // Stats calculation
+  const totalDepts = departments.length;
+  const activeHeads = departments.filter(d => d.status === 'Active' && d.head !== '-').length;
+  const inactiveUnits = departments.filter(d => d.status === 'Inactive').length;
 
   const handleOpenAddModal = () => {
     if (!isAdmin) return;
@@ -61,7 +69,6 @@ const OrganizationSetup = () => {
   const handleOpenEditCat = (cat) => {
     if (!isAdmin) return;
     setEditCat(cat);
-    // Convert attributes object to array of key-value pairs
     const fields = Object.entries(cat.attributes || {}).map(([key, value]) => ({ key, value }));
     setCatForm({ name: cat.name, customFields: fields.length ? fields : [{ key: '', value: '' }] });
     setIsCatModalOpen(true);
@@ -90,7 +97,6 @@ const OrganizationSetup = () => {
     e.preventDefault();
     if (!catForm.name) return;
 
-    // Convert key-value fields back to an attributes object
     const attrs = {};
     catForm.customFields.forEach(field => {
       if (field.key.trim()) {
@@ -137,6 +143,86 @@ const OrganizationSetup = () => {
     setCatForm({ ...catForm, customFields: fields });
   };
 
+  // Bulk Actions Handlers
+  const handleToggleSelectAll = () => {
+    if (selectedDeptIds.length === departments.length) {
+      setSelectedDeptIds([]);
+    } else {
+      setSelectedDeptIds(departments.map(d => d.id));
+    }
+  };
+
+  const handleSelectDept = (id) => {
+    setSelectedDeptIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleApplyBulkAction = () => {
+    if (!bulkAction || selectedDeptIds.length === 0) return;
+
+    selectedDeptIds.forEach(id => {
+      const dept = departments.find(d => d.id === id);
+      if (dept) {
+        if (bulkAction === 'deactivate') {
+          updateDepartment({ ...dept, status: 'Inactive' });
+        } else if (bulkAction === 'activate') {
+          updateDepartment({ ...dept, status: 'Active' });
+        } else if (bulkAction === 'clear-parent') {
+          updateDepartment({ ...dept, parent: '-' });
+        }
+      }
+    });
+
+    setSelectedDeptIds([]);
+    setBulkAction('');
+    alert('Bulk action executed successfully!');
+  };
+
+  // Recursive render node for org hierarchy tree
+  const renderDeptNode = (dept, depth = 0) => {
+    const children = departments.filter(d => d.parent === dept.name);
+    return (
+      <div key={dept.id} className="space-y-2">
+        <div className="flex items-center justify-between p-3.5 bg-zinc-900/60 border border-zinc-800 rounded-xl hover:border-zinc-700/80 transition shadow-sm">
+          <div className="flex items-center space-x-3">
+            <span className="text-zinc-500 font-semibold">{depth > 0 ? '↳ 📂' : '🏢'}</span>
+            <div>
+              <span className="font-semibold text-white text-sm">{dept.name}</span>
+              {dept.head !== '-' && (
+                <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-850 ml-3">
+                  Head: {dept.head}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+              dept.status === 'Active'
+                ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/80'
+                : 'bg-zinc-950/40 text-zinc-505 border-zinc-800'
+            }`}>{dept.status}</span>
+            {isAdmin && (
+              <button
+                onClick={() => handleOpenEditDept(dept)}
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+        </div>
+        {children.length > 0 && (
+          <div className="pl-6 border-l border-zinc-800/60 space-y-2 ml-4">
+            {children.map(child => renderDeptNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const topLevelDepts = departments.filter(d => d.parent === '-' || !d.parent);
+
   return (
     <div className="space-y-8 animate-fadeIn text-zinc-100">
       {/* View Header */}
@@ -146,7 +232,6 @@ const OrganizationSetup = () => {
           <p className="text-zinc-500 text-sm mt-1">Maintain master data, departments, category fields, and system roles.</p>
         </div>
 
-        {/* Info or Warning Banner */}
         {!isAdmin && (
           <div className="bg-amber-950/20 border border-amber-800/80 rounded-xl px-4 py-3 text-amber-400 text-xs flex items-center space-x-2">
             <span>🔒</span>
@@ -160,98 +245,193 @@ const OrganizationSetup = () => {
         <div className="flex space-x-1 p-0.5 bg-zinc-900 rounded-lg border border-zinc-800/80 self-start">
           <button
             onClick={() => setActiveTab('departments')}
-            className={`px-4 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+            className={`px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'departments'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            Departments
+            <span>Departments</span>
+            <span className="px-1.5 py-0.5 text-[9px] rounded-full font-bold bg-zinc-950 text-zinc-400">
+              {departments.length}
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('categories')}
-            className={`px-4 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+            className={`px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'categories'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            Categories
+            <span>Categories</span>
+            <span className="px-1.5 py-0.5 text-[9px] rounded-full font-bold bg-zinc-950 text-zinc-400">
+              {categories.length}
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('employees')}
-            className={`px-4 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+            className={`px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center space-x-2 cursor-pointer ${
               activeTab === 'employees'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            Employee Directory
+            <span>Employee Directory</span>
+            <span className="px-1.5 py-0.5 text-[9px] rounded-full font-bold bg-zinc-950 text-zinc-400">
+              {employees.length}
+            </span>
           </button>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          disabled={!isAdmin}
-          className={`flex items-center justify-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer ${
-            isAdmin
-              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/20'
-              : 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed'
-          }`}
-        >
-          <span>➕ Add</span>
-          <span className="capitalize">
-            {activeTab === 'departments' ? 'Department' : activeTab === 'categories' ? 'Category' : 'Employee'}
-          </span>
-        </button>
+        <div className="flex items-center space-x-3">
+          {/* View Hierarchy Toggle (Departments Tab Only) */}
+          {activeTab === 'departments' && (
+            <button
+              onClick={() => setViewHierarchy(!viewHierarchy)}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-bold text-zinc-350 hover:bg-zinc-800 transition cursor-pointer"
+            >
+              <span>{viewHierarchy ? '📋 Flat Table' : '🌳 Org Hierarchy'}</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleOpenAddModal}
+            disabled={!isAdmin}
+            className={`flex items-center justify-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer ${
+              isAdmin
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/20'
+                : 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed'
+            }`}
+          >
+            <span>➕ Add</span>
+            <span className="capitalize">
+              {activeTab === 'departments' ? 'Department' : activeTab === 'categories' ? 'Category' : 'Employee'}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Main Tables */}
+      {/* Summary Micro-Cards Strip */}
+      {activeTab === 'departments' && (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 flex flex-col">
+            <span className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider">Total Departments</span>
+            <span className="text-xl font-extrabold text-white mt-1">{totalDepts}</span>
+          </div>
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 flex flex-col">
+            <span className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider">Active Heads</span>
+            <span className="text-xl font-extrabold text-emerald-450 mt-1">{activeHeads}</span>
+          </div>
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3.5 flex flex-col">
+            <span className="text-[10px] text-zinc-550 font-bold uppercase tracking-wider">Inactive Units</span>
+            <span className="text-xl font-extrabold text-zinc-400 mt-1">{inactiveUnits}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Actions Bar (Table View Only) */}
+      {isAdmin && activeTab === 'departments' && !viewHierarchy && selectedDeptIds.length > 0 && (
+        <div className="bg-zinc-900 border border-emerald-900/40 rounded-xl p-4 flex items-center justify-between animate-fadeIn">
+          <div className="text-xs text-zinc-305 font-medium">
+            Selected <strong className="text-emerald-400">{selectedDeptIds.length}</strong> department(s)
+          </div>
+          <div className="flex items-center space-x-3">
+            <select
+              value={bulkAction}
+              onChange={(e) => setBulkAction(e.target.value)}
+              className="bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-lg px-3 py-2 focus:outline-none cursor-pointer"
+            >
+              <option value="">-- Choose Bulk Action --</option>
+              <option value="activate">Bulk Activate</option>
+              <option value="deactivate">Bulk Deactivate</option>
+              <option value="clear-parent">Bulk Clear Parent Department</option>
+            </select>
+            <button
+              onClick={handleApplyBulkAction}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+            >
+              Apply Action
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Container */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-lg shadow-zinc-950/20">
         
-        {/* Tab A: Departments Table */}
+        {/* Tab A: Departments List */}
         {activeTab === 'departments' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/60 text-zinc-400 text-xs font-bold uppercase tracking-wider">
-                  <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4">Head</th>
-                  <th className="px-6 py-4">Parent Dept</th>
-                  <th className="px-6 py-4">Status</th>
-                  {isAdmin && <th className="px-6 py-4 text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/80 text-zinc-300">
-                {departments.map((dept) => (
-                  <tr key={dept.id} className="hover:bg-zinc-800/25 transition">
-                    <td className="px-6 py-4 font-semibold text-white">{dept.name}</td>
-                    <td className="px-6 py-4 text-zinc-400">{dept.head}</td>
-                    <td className="px-6 py-4 text-zinc-500">{dept.parent}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                        dept.status === 'Active'
-                          ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/80'
-                          : 'bg-zinc-950/40 text-zinc-500 border-zinc-800'
-                      }`}>
-                        {dept.status}
-                      </span>
-                    </td>
+          viewHierarchy ? (
+            /* Tree View / Folder Structure */
+            <div className="p-6 space-y-4 max-h-[500px] overflow-y-auto">
+              {topLevelDepts.map(dept => renderDeptNode(dept))}
+              {topLevelDepts.length === 0 && (
+                <p className="text-center text-zinc-500 text-xs py-8">No root departments found to render hierarchy tree.</p>
+              )}
+            </div>
+          ) : (
+            /* Flat Table View */
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/60 text-zinc-400 text-xs font-bold uppercase tracking-wider">
                     {isAdmin && (
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => handleOpenEditDept(dept)}
-                          className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition mr-2 cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                      </td>
+                      <th className="px-6 py-4 w-12 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedDeptIds.length === departments.length}
+                          onChange={handleToggleSelectAll}
+                          className="w-3.5 h-3.5 text-emerald-600 bg-zinc-950 border-zinc-850 rounded focus:ring-emerald-500 cursor-pointer"
+                        />
+                      </th>
                     )}
+                    <th className="px-6 py-4">Department</th>
+                    <th className="px-6 py-4">Head</th>
+                    <th className="px-6 py-4">Parent Dept</th>
+                    <th className="px-6 py-4">Status</th>
+                    {isAdmin && <th className="px-6 py-4 text-right">Actions</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80 text-zinc-300">
+                  {departments.map((dept) => (
+                    <tr key={dept.id} className="hover:bg-zinc-800/25 transition">
+                      {isAdmin && (
+                        <td className="px-6 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedDeptIds.includes(dept.id)}
+                            onChange={() => handleSelectDept(dept.id)}
+                            className="w-3.5 h-3.5 text-emerald-600 bg-zinc-950 border-zinc-850 rounded focus:ring-emerald-500 cursor-pointer"
+                          />
+                        </td>
+                      )}
+                      <td className="px-6 py-4 font-semibold text-white">{dept.name}</td>
+                      <td className="px-6 py-4 text-zinc-400">{dept.head}</td>
+                      <td className="px-6 py-4 text-zinc-500">{dept.parent}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                          dept.status === 'Active'
+                            ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/80'
+                            : 'bg-zinc-950/40 text-zinc-505 border-zinc-800'
+                        }`}>{dept.status}</span>
+                      </td>
+                      {isAdmin && (
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => handleOpenEditDept(dept)}
+                            className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition mr-2 cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
 
         {/* Tab B: Categories Table */}
@@ -273,7 +453,7 @@ const OrganizationSetup = () => {
                       <div className="flex flex-wrap gap-2">
                         {Object.entries(cat.attributes || {}).map(([key, val]) => (
                           <span key={key} className="bg-zinc-950 text-zinc-400 text-xs px-2.5 py-1 rounded-md border border-zinc-800 font-medium">
-                            <strong className="text-zinc-300">{key}:</strong> {val}
+                            <strong className="text-zinc-305">{key}:</strong> {val}
                           </span>
                         ))}
                         {Object.keys(cat.attributes || {}).length === 0 && (
@@ -323,19 +503,15 @@ const OrganizationSetup = () => {
                         emp.role === 'Admin' ? 'bg-red-950/40 text-red-400 border border-red-900/50' :
                         emp.role === 'Department Head' ? 'bg-amber-950/40 text-amber-400 border border-amber-900/50' :
                         emp.role === 'Asset Manager' ? 'bg-blue-950/40 text-blue-400 border border-blue-900/50' :
-                        'bg-zinc-950 text-zinc-400 border border-zinc-800'
-                      }`}>
-                        {emp.role}
-                      </span>
+                        'bg-zinc-950 text-zinc-405 border border-zinc-800'
+                      }`}>{emp.role}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                         emp.status === 'Active'
                           ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/80'
-                          : 'bg-zinc-950/40 text-zinc-500 border-zinc-800'
-                      }`}>
-                        {emp.status}
-                      </span>
+                          : 'bg-zinc-950/40 text-zinc-505 border-zinc-800'
+                      }`}>{emp.status}</span>
                     </td>
                     {isAdmin && (
                       <td className="px-6 py-4 text-right">
@@ -482,14 +658,14 @@ const OrganizationSetup = () => {
                     <div key={idx} className="flex items-center space-x-2">
                       <input
                         type="text"
-                        placeholder="Label (e.g. Warranty)"
+                        placeholder="Label"
                         value={field.key}
                         onChange={(e) => handleCustomFieldChange(idx, 'key', e.target.value)}
                         className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
                       />
                       <input
                         type="text"
-                        placeholder="Default (e.g. 12m)"
+                        placeholder="Default"
                         value={field.value}
                         onChange={(e) => handleCustomFieldChange(idx, 'value', e.target.value)}
                         className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
@@ -583,10 +759,10 @@ const OrganizationSetup = () => {
                   onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 text-amber-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 font-semibold"
                 >
-                  <option value="Employee">Employee (Standard View)</option>
-                  <option value="Asset Manager">Asset Manager (Allocations, Maintenance approvals)</option>
-                  <option value="Department Head">Department Head (Approves dept booking/transfers)</option>
-                  <option value="Admin">Admin (Full organization setup config)</option>
+                  <option value="Employee">Employee</option>
+                  <option value="Asset Manager">Asset Manager</option>
+                  <option value="Department Head">Department Head</option>
+                  <option value="Admin">Admin</option>
                 </select>
               </div>
 
