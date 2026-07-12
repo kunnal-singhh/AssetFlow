@@ -22,7 +22,7 @@ export default function ActivityLogs() {
   });
 
   const getIcon = (type) => {
-    switch(type) {
+    switch (type) {
       case 'Alerts': return <AlertTriangle className="w-5 h-5 text-error" />;
       case 'Approvals': return <CheckCircle className="w-5 h-5 text-success" />;
       case 'Bookings': return <Calendar className="w-5 h-5 text-info" />;
@@ -37,12 +37,12 @@ export default function ActivityLogs() {
           <h1 className="text-3xl font-bold text-base-content">System Activity Logs</h1>
           <p className="text-base-content/70">Real-time audit trail and event tracking</p>
         </div>
-        
+
         <div className="form-control relative w-full sm:w-auto">
           <Search className="w-4 h-4 absolute left-3 top-3 text-base-content/50" />
-          <input 
-            type="text" 
-            placeholder="Search logs..." 
+          <input
+            type="text"
+            placeholder="Search logs..."
             className="input input-bordered pl-10 w-full"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -52,7 +52,7 @@ export default function ActivityLogs() {
 
       <div className="tabs tabs-boxed bg-base-200/50 p-1 w-full max-w-md">
         {tabs.map(tab => (
-          <button 
+          <button
             key={tab}
             className={`tab flex-1 ${activeTab === tab ? 'tab-active' : ''}`}
             onClick={() => setActiveTab(tab)}
@@ -86,9 +86,9 @@ export default function ActivityLogs() {
             </li>
           ))}
           {filteredLogs.length === 0 && (
-             <li className="p-8 text-center text-base-content/50">
-               No activity logs found matching the current filters.
-             </li>
+            <li className="p-8 text-center text-base-content/50">
+              No activity logs found matching the current filters.
+            </li>
           )}
         </ul>
       </div>

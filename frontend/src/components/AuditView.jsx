@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+import { AssetAuditWorkspace, ReportsAnalytics, ActivityLogs } from './audit-analytics';
+
 // Developer 3: Audit Cycles Logic.
 const AuditView = () => {
   const [audits, setAudits] = useState([]);
@@ -18,7 +20,7 @@ const AuditView = () => {
       <h2>Audit Cycles</h2>
       {/* Developer 3: Display current and past audit cycles */}
       <div>
-        <p>No audits mapped yet.</p>
+        <AssetAuditWorkspace />
       </div>
     </div>
   );
