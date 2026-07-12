@@ -9,6 +9,14 @@ import AssetAllocation from './components/AssetAllocation';
 import OrganizationSetup from './components/OrganizationSetup';
 import MaintenanceManagement from './components/MaintenanceManagement';
 import { ReportsAnalytics, ActivityLogs } from './components/audit-analytics';
+import LoginSignup from './components/LoginSignup';
+
+/**
+ * TODO (Backend): Import checkSession and logout from authApi once the
+ * backend auth endpoints are live. These are used to restore sessions
+ * on page refresh and handle logout from the sidebar.
+ */
+import { checkSession, logout, getStoredUser } from './api/authApi';
 
 // Create the shared state context
 export const AppContext = createContext();
@@ -89,7 +97,7 @@ function SidebarLink({ to, label, icon }) {
 }
 
 function NavigationAndSidebar() {
-  const { currentRole, setCurrentRole, assets } = React.useContext(AppContext);
+  const { currentRole, setCurrentRole, assets, authUser, handleLogout } = React.useContext(AppContext);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -189,6 +197,14 @@ function NavigationAndSidebar() {
               <p className="text-[10px] text-zinc-500 truncate">{currentRole}</p>
             </div>
           </div>
+          {/* Logout button */}
+          <button
+            onClick={handleLogout}
+            className="mt-3 w-full flex items-center justify-center space-x-2 px-3 py-2 bg-zinc-950 border border-zinc-800 text-zinc-400 text-xs font-semibold rounded-lg hover:bg-red-950/30 hover:text-red-400 hover:border-red-900/50 transition-all cursor-pointer"
+          >
+            <span>🚪</span>
+            <span>Sign Out</span>
+          </button>
         </div>
       </aside>
 
@@ -369,6 +385,64 @@ function NavigationAndSidebar() {
 }
 
 function App() {
+  // ─── Authentication state ──────────────────────────────────────────────
+  //
+  // TODO (Backend): When the backend auth is live, `authUser` will hold
+  // the user object returned by GET /api/auth/me (or POST /api/auth/login).
+  // The `currentRole` can then be derived from `authUser.role` instead of
+  // the simulated role switcher.
+  //
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true); // true while checking session
+
+  /**
+   * On mount, check if a previous session (token + user) exists in
+   * localStorage. If valid, skip the login screen.
+   *
+   * TODO (Backend): When the real GET /api/auth/me endpoint exists,
+   * `checkSession` will validate the token server-side instead of
+   * just reading localStorage.
+   */
+  useEffect(() => {
+    checkSession()
+      .then((result) => {
+        if (result && result.user) {
+          setAuthUser(result.user);
+          setIsAuthenticated(true);
+        }
+      })
+      .catch(() => {
+        // Token invalid or expired — stay on login screen
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  /**
+   * Called by LoginSignup after a successful login or signup.
+   * Receives the user object from authApi and transitions to the app.
+   *
+   * TODO (Backend): Once role comes from the backend JWT, set
+   * currentRole from user.role here:
+   *   setCurrentRole(mapBackendRoleToUIRole(user.role));
+   */
+  const handleAuthSuccess = (user) => {
+    setAuthUser(user);
+    setIsAuthenticated(true);
+  };
+
+  /**
+   * Log out: clear auth state and return to login screen.
+   *
+   * TODO (Backend): `logout()` in authApi.js will call
+   * POST /api/auth/logout to invalidate the token server-side.
+   */
+  const handleLogout = async () => {
+    await logout();
+    setAuthUser(null);
+    setIsAuthenticated(false);
+  };
+
   const [currentRole, setCurrentRole] = useState(() => {
     return localStorage.getItem('af_current_role') || 'Admin';
   });
@@ -575,6 +649,36 @@ function App() {
     setActivity((prev) => [newAct, ...prev]);
   };
 
+  // ─── Auth loading splash ──────────────────────────────────────────────
+  // Show a minimal loading indicator while we verify the stored session
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', width: '100vw', background: '#09090b'
+      }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: '50%',
+          border: '3px solid rgba(16,185,129,0.2)',
+          borderTopColor: '#10b981',
+          animation: 'spin 0.7s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ─── Auth gate: show Login/Signup when not authenticated ─────────────
+  //
+  // TODO (Backend): Once protected routes are enforced server-side,
+  // this client-side gate ensures the UI never renders the dashboard
+  // without a valid token. Add a 401/403 interceptor in your fetch
+  // wrapper to call handleLogout() when a token expires mid-session.
+  //
+  if (!isAuthenticated) {
+    return <LoginSignup onAuthSuccess={handleAuthSuccess} />;
+  }
+
   return (
     <AppContext.Provider
       value={{
@@ -602,7 +706,16 @@ function App() {
         requestTransfer,
         approveTransfer,
         returnAsset,
-        logActivity
+        logActivity,
+        // ── Auth context ──
+        // Expose auth data so any child component can access the
+        // logged-in user or trigger logout.
+        //
+        // TODO (Backend): Components that need the real user object
+        // (e.g., to display the logged-in user's name/role in the
+        // header) should read `authUser` from context.
+        authUser,
+        handleLogout,
       }}
     >
       <Router>
